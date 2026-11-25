@@ -13,7 +13,7 @@ Prototipo de consola para el sistema integral de gestión de inventario, ventas 
 | `src/modelos.py`, `src/errores.py`, `src/utils.py` | Entidades, errores de negocio y validaciones compartidas. |
 | `src/datos.py` | Dataset de demostración (se carga al iniciar). |
 | `docs/` | Justificación de las estructuras de datos por funcionalidad. |
-| `tests/` | 34 pruebas con `unittest` (sin dependencias externas). |
+| `tests/` | 34 pruebas con `unittest`. |
 
 El menú permite consultar/registrar productos, transferencias, ventas y pedidos, calcular rutas, revisar el registro de operaciones y recargar los datos de ejemplo. Para ver un despacho completo: **4 → 4** (atender `PED-001`), **4 → 5** (estado `LISTO`), **4 → 7** (despachar con ID de entrega).
 
@@ -22,10 +22,11 @@ El menú permite consultar/registrar productos, transferencias, ventas y pedidos
 ### Con uv (recomendado)
 
 ```bash
-uv run python main.py
+uv sync                 # crea .venv e instala las dependencias desde uv.lock
+uv run python main.py   # ejecuta el CLI dentro del entorno
 ```
 
-`uv` crea `.venv` automáticamente y respeta la versión de `.python-version` (Python 3.13).
+`uv` respeta la versión de `.python-version` (Python 3.13). Para agregar una librería nueva usa `uv add <paquete>`: actualiza `pyproject.toml` y `uv.lock`. Si solo quieres instalar lo que ya está bloqueado, `uv sync --frozen` no modifica el lockfile. (`uv run` también sincroniza el entorno automáticamente antes de ejecutar.)
 
 ### Con Python normal
 
@@ -34,10 +35,11 @@ python -m venv .venv
 # Windows PowerShell:
 .venv\Scripts\Activate.ps1
 # macOS/Linux: source .venv/bin/activate
+python -m pip install rich
 python main.py
 ```
 
-Si ya tienes Python 3.13 disponible, también puedes ejecutar `python main.py` directamente: el proyecto no tiene dependencias externas.
+La única dependencia es `rich`, usada para colores, negrita, paneles y tablas en la terminal; con `uv` se instala automáticamente desde `pyproject.toml` y `uv.lock`.
 
 ## Pruebas
 

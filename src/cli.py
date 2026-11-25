@@ -1,7 +1,7 @@
 """Interfaz de línea de comandos del prototipo de Los Manguitos.
 
-El menú solo presenta datos y captura entradas; toda la lógica de negocio está
-en ``Sistema`` y en los gestores de cada funcionalidad.
+Usa ``rich`` para paneles, colores, negrita y tablas. El menú solo presenta
+datos y captura entradas; la lógica de negocio vive en ``Sistema``.
 """
 
 from __future__ import annotations
@@ -9,20 +9,69 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Callable
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
 from src.datos import crear_sistema_con_datos
-from src.errores import ErrorDeNegocio
+from src.errores import ErrorDeNegocio, ValidacionError
 from src.modelos import Item
 from src.sistema import Sistema
-from src.utils import pausar, pedir_entero, pedir_texto
+from src.utils import entero_requerido
 
 Opciones = dict[str, tuple[str, Callable[[Sistema], None]]]
+consola = Console(highlight=False)
+
+
+# --- Ayudas de presentación y entrada ------------------------------------
+
+
+def _decir(texto: str, estilo: str = "") -> None:
+    """Imprime texto con estilo Rich, sin interpretar corchetes como markup."""
+    consola.print(texto, style=estilo or None, markup=False)
+
+
+def _pedir_texto(mensaje: str) -> str:
+    """Muestra una etiqueta en azul y lee una línea del operador."""
+    consola.print(Text(mensaje, style="bold blue"), end="")
+    return input().strip()
+
+
+def _pedir_entero(mensaje: str, minimo: int = 1) -> int:
+    """Pide un entero válido, repitiendo la pregunta si hace falta."""
+    while True:
+        valor = _pedir_texto(mensaje)
+        try:
+            return entero_requerido(int(valor), "Valor", minimo)
+        except (ValueError, ValidacionError):
+            _decir("Ingrese un número entero válido.", "bold red")
+
+
+def _pausar() -> None:
+    """Espera a que el operador presione Enter antes de seguir."""
+    consola.print(Text("\nPresione Enter para continuar...", style="dim"), end="")
+    input()
 
 
 def _titulo(texto: str) -> None:
-    """Imprime un encabezado visible para cada menú."""
-    print("\n" + "=" * 64)
-    print(texto)
-    print("=" * 64)
+    """Encabezado con panel cian."""
+    consola.print()
+    consola.print(
+        Panel(
+            Text(texto, style="bold cyan"),
+            border_style="bright_cyan",
+            expand=False,
+        )
+    )
+
+
+def _tabla(*columnas: str) -> Table:
+    """Crea una tabla ligera con encabezados en magenta."""
+    tabla = Table(box=None, show_header=True, header_style="bold magenta", pad_edge=False)
+    for columna in columnas:
+        tabla.add_column(columna)
+    return tabla
 
 
 def _formatear_items(items: list[Item]) -> str:
@@ -33,42 +82,59 @@ def _formatear_items(items: list[Item]) -> str:
 def _leer_items() -> list[Item]:
     """Pide ítems como 'SKU,Cantidad,Precio'; línea vacía termina."""
     items: list[Item] = []
-    print("Ítems (formato: SKU,Cantidad,Precio). Línea vacía para terminar:")
+    _decir("Ítems (formato: SKU,Cantidad,Precio). Línea vacía para terminar:", "dim")
     while True:
-        linea = pedir_texto("  > ")
+        linea = _pedir_texto("  > ")
         if not linea:
             break
         partes = [parte.strip() for parte in linea.split(",")]
         if len(partes) != 3:
-            print("  Formato inválido. Ejemplo: MANG-01,2,25000")
+            _decir("  Formato inválido. Ejemplo: MANG-01,2,25000", "bold red")
             continue
         try:
             items.append(Item(partes[0], int(partes[1]), int(partes[2])))
         except ValueError:
-            print("  Cantidad y precio deben ser enteros.")
+            _decir("  Cantidad y precio deben ser enteros.", "bold red")
     return items
+
+
+def _mostrar_opciones(opciones: Opciones, incluir_volver: bool = True) -> None:
+    """Muestra las opciones de un submenú como una tabla."""
+    tabla = Table(box=None, show_header=False, pad_edge=False)
+    tabla.add_column(style="bold yellow", width=4)
+    tabla.add_column()
+    for clave, (etiqueta, _) in opciones.items():
+        tabla.add_row(Text(clave), Text(etiqueta))
+    if incluir_volver:
+        tabla.add_row(Text("0"), Text("Volver al menú principal"))
+    consola.print(tabla)
 
 
 def _submenu(titulo: str, opciones: Opciones, sistema: Sistema) -> None:
     """Muestra un submenú y despacha la acción elegida."""
     while True:
         _titulo(titulo)
-        for clave, (etiqueta, _) in opciones.items():
-            print(f"  {clave}. {etiqueta}")
-        print("  0. Volver al menú principal")
-        opcion = pedir_texto("Opción: ")
+        _mostrar_opciones(opciones)
+        opcion = _pedir_texto("Opción: ")
         if opcion == "0":
             return
         accion = opciones.get(opcion)
         if accion is None:
-            print("Opción inválida.")
-            pausar()
+            _decir("Opción inválida.", "bold red")
+            _pausar()
             continue
         try:
             accion[1](sistema)
         except ErrorDeNegocio as exc:
-            print(f"Error: {exc}")
-        pausar()
+            consola.print(
+                Panel(
+                    Text(f"Error: {exc}", style="bold red"),
+                    title="Atención",
+                    border_style="red",
+                    expand=False,
+                )
+            )
+        _pausar()
 
 
 # --- Funcionalidad 1: productos e inventario -----------------------------
@@ -77,60 +143,75 @@ def _submenu(titulo: str, opciones: Opciones, sistema: Sistema) -> None:
 def _listar_productos(sistema: Sistema) -> None:
     productos = sistema.productos.listar_productos()
     if not productos:
-        print("No hay productos registrados.")
+        _decir("No hay productos registrados.", "italic yellow")
         return
+    tabla = _tabla("SKU", "Nombre", "Categoría", "Proveedor")
     for producto in productos:
-        print(
-            f"  {producto.sku:<10} {producto.nombre:<20} "
-            f"cat={producto.categoria:<12} proveedor={producto.proveedor_id}"
+        tabla.add_row(
+            Text(producto.sku, style="bold yellow"),
+            Text(producto.nombre),
+            Text(producto.categoria, style="cyan"),
+            Text(producto.proveedor_id),
         )
+    consola.print(tabla)
 
 
 def _consultar_producto(sistema: Sistema) -> None:
-    sku = pedir_texto("SKU: ")
+    sku = _pedir_texto("SKU: ")
     producto = sistema.productos.consultar_producto(sku)
-    print(f"  {producto}")
-    print(f"  Stock total: {sistema.consultar_stock_total(sku)}")
-    print(f"  Stock por ubicación: {sistema.ubicaciones.stock_por_ubicacion(sku)}")
+    _decir(str(producto), "bold")
+    _decir(f"Stock total: {sistema.consultar_stock_total(sku)}", "bold green")
+    _decir(f"Stock por ubicación: {sistema.ubicaciones.stock_por_ubicacion(sku)}")
 
 
 def _listar_categoria(sistema: Sistema) -> None:
-    categoria = pedir_texto("Categoría (incluye subcategorías): ")
+    categoria = _pedir_texto("Categoría (incluye subcategorías): ")
     productos = sistema.productos.listar_categoria(categoria)
     if not productos:
-        print("No hay productos en esa categoría.")
+        _decir("No hay productos en esa categoría.", "italic yellow")
         return
+    tabla = _tabla("SKU", "Nombre", "Categoría")
     for producto in productos:
-        print(f"  {producto.sku} - {producto.nombre} ({producto.categoria})")
+        tabla.add_row(
+            Text(producto.sku, style="bold yellow"),
+            Text(producto.nombre),
+            Text(producto.categoria, style="cyan"),
+        )
+    consola.print(tabla)
 
 
 def _registrar_entrada(sistema: Sistema) -> None:
-    sku = pedir_texto("SKU: ")
-    cantidad = pedir_entero("Cantidad: ")
-    ubicacion = pedir_texto("Ubicación: ")
+    sku = _pedir_texto("SKU: ")
+    cantidad = _pedir_entero("Cantidad: ")
+    ubicacion = _pedir_texto("Ubicación: ")
     stock = sistema.registrar_entrada(sku, cantidad, ubicacion)
-    print(f"Entrada registrada. Stock ahora en {ubicacion}: {stock}")
+    _decir(f"Entrada registrada. Stock ahora en {ubicacion}: {stock}", "bold green")
 
 
 def _registrar_salida(sistema: Sistema) -> None:
-    sku = pedir_texto("SKU: ")
-    cantidad = pedir_entero("Cantidad: ")
-    ubicacion = pedir_texto("Ubicación: ")
+    sku = _pedir_texto("SKU: ")
+    cantidad = _pedir_entero("Cantidad: ")
+    ubicacion = _pedir_texto("Ubicación: ")
     stock = sistema.registrar_salida(sku, cantidad, ubicacion)
-    print(f"Salida registrada. Stock ahora en {ubicacion}: {stock}")
+    _decir(f"Salida registrada. Stock ahora en {ubicacion}: {stock}", "bold green")
 
 
 def _ver_movimientos(sistema: Sistema) -> None:
-    sku = pedir_texto("SKU: ")
+    sku = _pedir_texto("SKU: ")
     movimientos = sistema.productos.movimientos(sku)
     if not movimientos:
-        print("El producto no tiene movimientos registrados.")
+        _decir("El producto no tiene movimientos registrados.", "italic yellow")
         return
+    tabla = _tabla("Fecha", "Tipo", "Cantidad", "Descripción")
     for movimiento in movimientos:
-        print(
-            f"  {movimiento.timestamp:%Y-%m-%d %H:%M}  {movimiento.tipo:<8} "
-            f"{movimiento.cantidad:>4}  {movimiento.descripcion}"
+        estilo = "green" if movimiento.tipo == "entrada" else "red"
+        tabla.add_row(
+            Text(f"{movimiento.timestamp:%Y-%m-%d %H:%M}"),
+            Text(movimiento.tipo, style=f"bold {estilo}"),
+            Text(str(movimiento.cantidad)),
+            Text(movimiento.descripcion),
         )
+    consola.print(tabla)
 
 
 def menu_productos(sistema: Sistema) -> None:
@@ -152,47 +233,59 @@ def menu_productos(sistema: Sistema) -> None:
 def _listar_ubicaciones(sistema: Sistema) -> None:
     ubicaciones = sistema.ubicaciones.listar_ubicaciones()
     if not ubicaciones:
-        print("No hay ubicaciones registradas.")
+        _decir("No hay ubicaciones registradas.", "italic yellow")
         return
+    tabla = _tabla("ID", "Nombre", "Tipo")
     for ubicacion in ubicaciones:
-        print(f"  {ubicacion.id:<14} {ubicacion.nombre:<20} ({ubicacion.tipo})")
+        tabla.add_row(
+            Text(ubicacion.id, style="bold yellow"),
+            Text(ubicacion.nombre),
+            Text(ubicacion.tipo, style="cyan"),
+        )
+    consola.print(tabla)
 
 
 def _consultar_stock(sistema: Sistema) -> None:
-    ubicacion = pedir_texto("Ubicación: ")
-    sku = pedir_texto("SKU: ")
+    ubicacion = _pedir_texto("Ubicación: ")
+    sku = _pedir_texto("SKU: ")
     cantidad = sistema.ubicaciones.consultar_stock(ubicacion, sku)
-    print(f"  {sku} en {ubicacion}: {cantidad} unidades")
+    _decir(f"{sku} en {ubicacion}: {cantidad} unidades", "bold green")
 
 
 def _solicitar_transferencia(sistema: Sistema) -> None:
-    id_transferencia = pedir_texto("ID de transferencia: ")
-    origen = pedir_texto("Origen: ")
-    destino = pedir_texto("Destino: ")
-    sku = pedir_texto("SKU: ")
-    cantidad = pedir_entero("Cantidad: ")
+    id_transferencia = _pedir_texto("ID de transferencia: ")
+    origen = _pedir_texto("Origen: ")
+    destino = _pedir_texto("Destino: ")
+    sku = _pedir_texto("SKU: ")
+    cantidad = _pedir_entero("Cantidad: ")
     sistema.solicitar_transferencia(id_transferencia, origen, destino, sku, cantidad)
-    print(f"Transferencia {id_transferencia} encolada.")
+    _decir(f"Transferencia {id_transferencia} encolada.", "bold green")
 
 
 def _procesar_transferencia(sistema: Sistema) -> None:
     transferencia = sistema.procesar_siguiente_transferencia()
-    print(
+    _decir(
         f"Transferencia {transferencia.id}: {transferencia.cantidad} x "
-        f"{transferencia.sku} de {transferencia.origen} a {transferencia.destino}"
+        f"{transferencia.sku} de {transferencia.origen} a {transferencia.destino}",
+        "bold green",
     )
 
 
 def _ver_transferencias(sistema: Sistema) -> None:
     pendientes = sistema.ubicaciones.transferencias_pendientes()
     if not pendientes:
-        print("No hay transferencias pendientes.")
+        _decir("No hay transferencias pendientes.", "italic yellow")
         return
+    tabla = _tabla("ID", "Origen", "Destino", "Producto", "Cantidad")
     for transferencia in pendientes:
-        print(
-            f"  {transferencia.id}: {transferencia.origen} -> {transferencia.destino} "
-            f"({transferencia.cantidad} x {transferencia.sku})"
+        tabla.add_row(
+            Text(transferencia.id, style="bold yellow"),
+            Text(transferencia.origen),
+            Text(transferencia.destino),
+            Text(transferencia.sku, style="cyan"),
+            Text(str(transferencia.cantidad)),
         )
+    consola.print(tabla)
 
 
 def menu_ubicaciones(sistema: Sistema) -> None:
@@ -213,58 +306,77 @@ def menu_ubicaciones(sistema: Sistema) -> None:
 def _listar_clientes(sistema: Sistema) -> None:
     clientes = sistema.ventas.listar_clientes()
     if not clientes:
-        print("No hay clientes registrados.")
+        _decir("No hay clientes registrados.", "italic yellow")
         return
+    tabla = _tabla("ID", "Nombre", "Tipo")
     for cliente in clientes:
-        print(f"  {cliente.id:<8} {cliente.nombre:<24} ({cliente.tipo})")
+        tabla.add_row(
+            Text(cliente.id, style="bold yellow"),
+            Text(cliente.nombre),
+            Text(cliente.tipo, style="cyan"),
+        )
+    consola.print(tabla)
 
 
 def _registrar_cliente(sistema: Sistema) -> None:
-    id_cliente = pedir_texto("ID de cliente: ")
-    nombre = pedir_texto("Nombre: ")
-    tipo = pedir_texto("Tipo (natural/empresa): ")
+    id_cliente = _pedir_texto("ID de cliente: ")
+    nombre = _pedir_texto("Nombre: ")
+    tipo = _pedir_texto("Tipo (natural/empresa): ")
     sistema.ventas.registrar_cliente(id_cliente, nombre, tipo)
-    print(f"Cliente {id_cliente} registrado.")
+    _decir(f"Cliente {id_cliente} registrado.", "bold green")
 
 
 def _registrar_venta(sistema: Sistema) -> None:
-    id_venta = pedir_texto("ID de venta: ")
-    id_cliente = pedir_texto("ID de cliente: ")
+    id_venta = _pedir_texto("ID de venta: ")
+    id_cliente = _pedir_texto("ID de cliente: ")
     items = _leer_items()
     venta = sistema.registrar_venta(id_venta, id_cliente, items)
-    print(f"Venta {venta.id} registrada por {venta.total}.")
+    _decir(f"Venta {venta.id} registrada por {venta.total}.", "bold green")
 
 
 def _listar_ventas(sistema: Sistema) -> None:
     ventas = sistema.ventas.todas_las_ventas()
     if not ventas:
-        print("No hay ventas registradas.")
+        _decir("No hay ventas registradas.", "italic yellow")
         return
+    tabla = _tabla("ID", "Cliente", "Total", "Estado", "Ítems")
     for venta in ventas:
         estado = "CANCELADA" if venta.cancelada else "ACTIVA"
-        print(
-            f"  {venta.id:<10} cliente={venta.cliente_id:<8} "
-            f"total={venta.total:<8} {estado} [{_formatear_items(venta.items)}]"
+        estilo = "bold red" if venta.cancelada else "bold green"
+        tabla.add_row(
+            Text(venta.id, style="bold yellow"),
+            Text(venta.cliente_id),
+            Text(str(venta.total)),
+            Text(estado, style=estilo),
+            Text(_formatear_items(venta.items)),
         )
+    consola.print(tabla)
 
 
 def _ventas_por_cliente(sistema: Sistema) -> None:
-    id_cliente = pedir_texto("ID de cliente: ")
+    id_cliente = _pedir_texto("ID de cliente: ")
     ventas = sistema.ventas.ventas_cliente(id_cliente)
     if not ventas:
-        print("El cliente no tiene ventas registradas.")
+        _decir("El cliente no tiene ventas registradas.", "italic yellow")
         return
+    tabla = _tabla("ID", "Total", "Estado")
     for venta in ventas:
-        print(f"  {venta.id}: {venta.total} ({'cancelada' if venta.cancelada else 'activa'})")
+        tabla.add_row(
+            Text(venta.id, style="bold yellow"),
+            Text(str(venta.total)),
+            Text("cancelada" if venta.cancelada else "activa",
+                 style="red" if venta.cancelada else "green"),
+        )
+    consola.print(tabla)
 
 
 def _cancelar_venta(sistema: Sistema) -> None:
     venta = sistema.cancelar_ultima_venta()
-    print(f"Venta {venta.id} cancelada; stock devuelto.")
+    _decir(f"Venta {venta.id} cancelada; stock devuelto.", "bold green")
 
 
 def _total_vendido(sistema: Sistema) -> None:
-    print(f"Total vendido (sin cancelaciones): {sistema.ventas.total_vendido()}")
+    _decir(f"Total vendido (sin cancelaciones): {sistema.ventas.total_vendido()}", "bold green")
 
 
 def menu_ventas(sistema: Sistema) -> None:
@@ -287,58 +399,78 @@ def menu_ventas(sistema: Sistema) -> None:
 def _listar_pedidos(sistema: Sistema) -> None:
     pedidos = sistema.pedidos.todos_los_pedidos()
     if not pedidos:
-        print("No hay pedidos registrados.")
+        _decir("No hay pedidos registrados.", "italic yellow")
         return
+    tabla = _tabla("ID", "Cliente", "Destino", "Estado", "Ítems")
     for pedido in pedidos:
-        print(
-            f"  {pedido.id:<10} cliente={pedido.cliente_id:<8} "
-            f"destino={pedido.destino:<12} estado={pedido.estado:<12} "
-            f"[{_formatear_items(pedido.items)}]"
+        estados = {
+            "RECIBIDO": "yellow",
+            "PREPARANDO": "cyan",
+            "LISTO": "green",
+            "DESPACHADO": "bold green",
+            "CANCELADO": "bold red",
+        }
+        tabla.add_row(
+            Text(pedido.id, style="bold yellow"),
+            Text(pedido.cliente_id),
+            Text(pedido.destino),
+            Text(pedido.estado, style=estados.get(pedido.estado, "")),
+            Text(_formatear_items(pedido.items)),
         )
+    consola.print(tabla)
 
 
 def _pedidos_pendientes(sistema: Sistema) -> None:
     pedidos = sistema.pedidos.pedidos_pendientes()
     if not pedidos:
-        print("La cola de atención está vacía.")
+        _decir("La cola de atención está vacía.", "italic yellow")
         return
+    tabla = _tabla("ID", "Cliente", "Destino")
     for pedido in pedidos:
-        print(f"  {pedido.id} - {pedido.cliente_id} -> {pedido.destino}")
+        tabla.add_row(
+            Text(pedido.id, style="bold yellow"),
+            Text(pedido.cliente_id),
+            Text(pedido.destino),
+        )
+    consola.print(tabla)
 
 
 def _crear_pedido(sistema: Sistema) -> None:
-    id_pedido = pedir_texto("ID de pedido: ")
-    id_cliente = pedir_texto("ID de cliente: ")
-    destino = pedir_texto("Destino (ubicación): ")
+    id_pedido = _pedir_texto("ID de pedido: ")
+    id_cliente = _pedir_texto("ID de cliente: ")
+    destino = _pedir_texto("Destino (ubicación): ")
     items = _leer_items()
     pedido = sistema.crear_pedido(id_pedido, id_cliente, destino, items)
-    print(f"Pedido {pedido.id} encolado con estado {pedido.estado}.")
+    _decir(f"Pedido {pedido.id} encolado con estado {pedido.estado}.", "bold green")
 
 
 def _atender_pedido(sistema: Sistema) -> None:
     pedido = sistema.atender_siguiente_pedido()
-    print(f"Pedido {pedido.id} en atención; estado: {pedido.estado}.")
+    _decir(f"Pedido {pedido.id} en atención; estado: {pedido.estado}", "bold green")
 
 
 def _cambiar_estado(sistema: Sistema) -> None:
-    id_pedido = pedir_texto("ID de pedido: ")
-    print("Estados: RECIBIDO, PREPARANDO, LISTO, DESPACHADO, CANCELADO")
-    estado = pedir_texto("Nuevo estado: ").upper()
+    id_pedido = _pedir_texto("ID de pedido: ")
+    _decir("Estados: RECIBIDO, PREPARANDO, LISTO, DESPACHADO, CANCELADO", "dim")
+    estado = _pedir_texto("Nuevo estado: ").upper()
     pedido = sistema.cambiar_estado_pedido(id_pedido, estado)
-    print(f"Pedido {pedido.id} ahora está {pedido.estado}.")
+    _decir(f"Pedido {pedido.id} ahora está {pedido.estado}.", "bold green")
 
 
 def _deshacer_cambio(sistema: Sistema) -> None:
-    id_pedido = pedir_texto("ID de pedido: ")
+    id_pedido = _pedir_texto("ID de pedido: ")
     pedido = sistema.deshacer_cambio_pedido(id_pedido)
-    print(f"Estado restaurado: {pedido.estado}.")
+    _decir(f"Estado restaurado: {pedido.estado}.", "bold yellow")
 
 
 def _despachar_pedido(sistema: Sistema) -> None:
-    id_pedido = pedir_texto("ID de pedido (debe estar LISTO): ")
-    id_entrega = pedir_texto("ID de entrega: ")
+    id_pedido = _pedir_texto("ID de pedido (debe estar LISTO): ")
+    id_entrega = _pedir_texto("ID de entrega: ")
     entrega = sistema.despachar_pedido(id_pedido, id_entrega)
-    print(f"Entrega {entrega.id} registrada. Ruta: {' -> '.join(entrega.ruta)}")
+    _decir(
+        f"Entrega {entrega.id} registrada. Ruta: {' -> '.join(entrega.ruta)}",
+        "bold green",
+    )
 
 
 def menu_pedidos(sistema: Sistema) -> None:
@@ -361,40 +493,48 @@ def menu_pedidos(sistema: Sistema) -> None:
 def _ver_red(sistema: Sistema) -> None:
     nodos = sistema.logistica.nodos()
     if not nodos:
-        print("La red está vacía.")
+        _decir("La red está vacía.", "italic yellow")
         return
+    tabla = _tabla("Nodo", "Vecinos (distancia)")
     for nodo in nodos:
-        print(f"  {nodo}: {sistema.logistica.vecinos(nodo)}")
+        tabla.add_row(
+            Text(nodo, style="bold yellow"),
+            Text(str(sistema.logistica.vecinos(nodo))),
+        )
+    consola.print(tabla)
 
 
 def _ruta_mas_corta(sistema: Sistema) -> None:
-    origen = pedir_texto("Origen: ")
-    destino = pedir_texto("Destino: ")
+    origen = _pedir_texto("Origen: ")
+    destino = _pedir_texto("Destino: ")
     ruta = sistema.ruta_mas_corta(origen, destino)
-    print("Ruta más corta: " + " -> ".join(ruta))
+    _decir("Ruta más corta: " + " -> ".join(ruta), "bold green")
 
 
 def _rutas_posibles(sistema: Sistema) -> None:
-    origen = pedir_texto("Origen: ")
-    destino = pedir_texto("Destino: ")
+    origen = _pedir_texto("Origen: ")
+    destino = _pedir_texto("Destino: ")
     rutas = sistema.rutas_posibles(origen, destino)
     if not rutas:
-        print("No hay rutas simples entre esos nodos.")
+        _decir("No hay rutas simples entre esos nodos.", "italic yellow")
         return
     for ruta in rutas:
-        print("  " + " -> ".join(ruta))
+        _decir("  " + " -> ".join(ruta), "cyan")
 
 
 def _listar_entregas(sistema: Sistema) -> None:
     entregas = sistema.logistica.listar_entregas()
     if not entregas:
-        print("No hay entregas registradas.")
+        _decir("No hay entregas registradas.", "italic yellow")
         return
+    tabla = _tabla("ID", "Pedido", "Ruta")
     for entrega in entregas:
-        print(
-            f"  {entrega.id}: pedido {entrega.pedido_id} | "
-            + " -> ".join(entrega.ruta)
+        tabla.add_row(
+            Text(entrega.id, style="bold yellow"),
+            Text(entrega.pedido_id),
+            Text(" -> ".join(entrega.ruta), style="green"),
         )
+    consola.print(tabla)
 
 
 def menu_logistica(sistema: Sistema) -> None:
@@ -412,43 +552,65 @@ def menu_logistica(sistema: Sistema) -> None:
 
 
 def _ultimos_eventos(sistema: Sistema) -> None:
-    eventos = sistema.seguimiento.ultimos_eventos(pedir_entero("Cantidad: "))
+    eventos = sistema.seguimiento.ultimos_eventos(_pedir_entero("Cantidad: "))
+    if not eventos:
+        _decir("No hay eventos registrados.", "italic yellow")
+        return
+    tabla = _tabla("#", "Fecha", "Tipo", "Operación", "Descripción")
     for evento in eventos:
-        print(
-            f"  #{evento.id} {evento.timestamp:%Y-%m-%d %H:%M:%S} "
-            f"{evento.tipo:<13} {evento.operacion_id:<10} {evento.descripcion}"
+        tabla.add_row(
+            Text(str(evento.id)),
+            Text(f"{evento.timestamp:%Y-%m-%d %H:%M:%S}"),
+            Text(evento.tipo, style="cyan"),
+            Text(evento.operacion_id, style="bold yellow"),
+            Text(evento.descripcion),
         )
+    consola.print(tabla)
 
 
 def _eventos_por_tipo(sistema: Sistema) -> None:
-    tipo = pedir_texto("Tipo (inventario/venta/pedido/despacho/transferencia): ")
+    tipo = _pedir_texto("Tipo (inventario/venta/pedido/despacho/transferencia): ")
     eventos = sistema.seguimiento.eventos_por_tipo(tipo)
     if not eventos:
-        print("No hay eventos de ese tipo.")
+        _decir("No hay eventos de ese tipo.", "italic yellow")
         return
+    tabla = _tabla("#", "Operación", "Descripción")
     for evento in eventos:
-        print(f"  #{evento.id} {evento.operacion_id}: {evento.descripcion}")
+        tabla.add_row(
+            Text(str(evento.id)),
+            Text(evento.operacion_id, style="bold yellow"),
+            Text(evento.descripcion),
+        )
+    consola.print(tabla)
 
 
 def _eventos_entre_fechas(sistema: Sistema) -> None:
-    print("Formato: AAAA-MM-DDTHH:MM (UTC), por ejemplo 2026-11-24T10:00")
-    desde = datetime.fromisoformat(pedir_texto("Desde: "))
-    hasta = datetime.fromisoformat(pedir_texto("Hasta: "))
+    _decir("Formato: AAAA-MM-DDTHH:MM (UTC), por ejemplo 2026-11-24T10:00", "dim")
+    desde = datetime.fromisoformat(_pedir_texto("Desde: "))
+    hasta = datetime.fromisoformat(_pedir_texto("Hasta: "))
     if desde.tzinfo is None:
         desde = desde.replace(tzinfo=timezone.utc)
     if hasta.tzinfo is None:
         hasta = hasta.replace(tzinfo=timezone.utc)
     eventos = sistema.seguimiento.eventos_entre(desde, hasta)
     if not eventos:
-        print("No hay eventos en ese rango.")
+        _decir("No hay eventos en ese rango.", "italic yellow")
         return
+    tabla = _tabla("Fecha", "Tipo", "Descripción")
     for evento in eventos:
-        print(f"  {evento.timestamp:%Y-%m-%d %H:%M} {evento.tipo}: {evento.descripcion}")
+        tabla.add_row(
+            Text(f"{evento.timestamp:%Y-%m-%d %H:%M}"),
+            Text(evento.tipo, style="cyan"),
+            Text(evento.descripcion),
+        )
+    consola.print(tabla)
 
 
 def _resumen_eventos(sistema: Sistema) -> None:
+    tabla = _tabla("Tipo", "Eventos")
     for tipo, cantidad in sistema.seguimiento.resumen_por_tipo().items():
-        print(f"  {tipo:<14} {cantidad}")
+        tabla.add_row(Text(tipo, style="cyan"), Text(str(cantidad), style="bold"))
+    consola.print(tabla)
 
 
 def menu_seguimiento(sistema: Sistema) -> None:
@@ -465,28 +627,42 @@ def menu_seguimiento(sistema: Sistema) -> None:
 def run() -> None:
     """Inicia el menú principal con los datos de demostración cargados."""
     sistema = crear_sistema_con_datos()
-    print("Bienvenido al sistema de gestión de Los Manguitos (prototipo CLI).")
-    print("Se cargaron datos de ejemplo: productos, stock, clientes, ventas y pedidos.")
+    consola.print(
+        Panel(
+            Text("Los Manguitos", style="bold white"),
+            title="Sistema integral de gestión",
+            subtitle="Prototipo CLI",
+            border_style="blue",
+            expand=False,
+        )
+    )
+    _decir("Se cargaron datos de ejemplo: productos, stock, clientes, ventas y pedidos.", "dim")
 
     while True:
         _titulo("Menú principal")
-        print("  1. Productos e inventario")
-        print("  2. Bodegas y sucursales")
-        print("  3. Clientes y ventas")
-        print("  4. Pedidos")
-        print("  5. Logística y distribución")
-        print("  6. Seguimiento de operaciones")
-        print("  7. Recargar datos de ejemplo")
-        print("  0. Salir")
-        opcion = pedir_texto("Opción: ")
+        tabla = _tabla("Opción", "Módulo")
+        modulos = (
+            ("1", "Productos e inventario"),
+            ("2", "Bodegas y sucursales"),
+            ("3", "Clientes y ventas"),
+            ("4", "Pedidos"),
+            ("5", "Logística y distribución"),
+            ("6", "Seguimiento de operaciones"),
+            ("7", "Recargar datos de ejemplo"),
+            ("0", "Salir"),
+        )
+        for clave, etiqueta in modulos:
+            tabla.add_row(Text(clave, style="bold yellow"), Text(etiqueta))
+        consola.print(tabla)
+        opcion = _pedir_texto("Opción: ")
 
         if opcion == "0":
-            print("Hasta pronto.")
+            _decir("Hasta pronto.", "bold green")
             return
         if opcion == "7":
             sistema = crear_sistema_con_datos()
-            print("Datos de ejemplo recargados.")
-            pausar()
+            _decir("Datos de ejemplo recargados.", "bold green")
+            _pausar()
             continue
 
         menus = {
@@ -499,7 +675,7 @@ def run() -> None:
         }
         menu = menus.get(opcion)
         if menu is None:
-            print("Opción inválida.")
-            pausar()
+            _decir("Opción inválida.", "bold red")
+            _pausar()
             continue
         menu(sistema)
