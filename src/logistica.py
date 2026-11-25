@@ -93,23 +93,42 @@ class RedLogistica:
         if max_profundidad < 1 or limite < 1:
             raise ValidacionError("Profundidad y límite deben ser mayores que cero")
         rutas: list[list[str]] = []
-
-        def explorar(actual: str, camino: list[str], visitados: set[str]) -> None:
-            if len(rutas) >= limite or len(camino) > max_profundidad:
-                return
-            for vecino in self._grafo[actual]:
-                if vecino in visitados:
-                    continue
-                nuevo_camino = [*camino, vecino]
-                if vecino == destino:
-                    rutas.append(nuevo_camino)
-                    if len(rutas) >= limite:
-                        return
-                else:
-                    explorar(vecino, nuevo_camino, visitados | {vecino})
-
-        explorar(origen, [origen], {origen})
+        self._explorar_rutas(
+            origen, destino, [origen], {origen}, max_profundidad, limite, rutas
+        )
         return rutas
+
+    def _explorar_rutas(
+        self,
+        actual: str,
+        destino: str,
+        camino: list[str],
+        visitados: set[str],
+        max_profundidad: int,
+        limite: int,
+        rutas: list[list[str]],
+    ) -> None:
+        """Paso recursivo del DFS; es un método, no una función anidada."""
+        if len(rutas) >= limite or len(camino) > max_profundidad:
+            return
+        for vecino in self._grafo[actual]:
+            if vecino in visitados:
+                continue
+            nuevo_camino = [*camino, vecino]
+            if vecino == destino:
+                rutas.append(nuevo_camino)
+                if len(rutas) >= limite:
+                    return
+            else:
+                self._explorar_rutas(
+                    vecino,
+                    destino,
+                    nuevo_camino,
+                    visitados | {vecino},
+                    max_profundidad,
+                    limite,
+                    rutas,
+                )
 
     def registrar_entrega(self, id_entrega: str, pedido_id: str, ruta: list[str]) -> Entrega:
         """Guarda el despacho de un pedido por una ruta ya calculada."""
