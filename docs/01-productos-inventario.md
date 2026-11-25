@@ -2,7 +2,9 @@
 
 **Necesidad:** registrar productos, categorías y proveedores; controlar existencias y registrar entradas y salidas.
 
-**Estado:** diseñado, pendiente de implementación.
+**Estado:** implementado en `src/productos.py`.
+
+**Nota de implementación:** el stock efectivo es propiedad de `GestorUbicaciones` (fuente única de verdad); `Producto` no duplica el número. `Sistema.consultar_stock_total(sku)` lo obtiene sumando las ubicaciones, y la lista de movimientos queda como historial de auditoría.
 
 ## Estructuras elegidas
 

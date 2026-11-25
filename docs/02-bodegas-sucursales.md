@@ -2,7 +2,7 @@
 
 **Necesidad:** controlar existencias por ubicación y gestionar transferencias entre bodegas y sucursales.
 
-**Estado:** diseñado, pendiente de implementación.
+**Estado:** implementado en `src/ubicaciones.py` (usa `collections.deque`).
 
 ## Estructuras elegidas
 

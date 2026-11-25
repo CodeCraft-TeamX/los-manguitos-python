@@ -2,15 +2,20 @@
 
 Prototipo de consola para el sistema integral de gestión de inventario, ventas y distribución de **Los Manguitos**. La versión web (HTML) del prototipo se desarrolla en un repositorio aparte.
 
-## Estructura base
+## Estructura
 
 | Ruta | Contenido |
 | --- | --- |
 | `main.py` | Punto de entrada de la aplicación. |
-| `src/cli.py` | Interfaz de línea de comandos (menú). |
-| `src/utils.py` | Funciones auxiliares reutilizables. |
-| `docs/` | Decisiones de estructuras de datos por funcionalidad. |
-| `tests/` | Pruebas automatizadas con `unittest` (sin dependencias). |
+| `src/cli.py` | Menú de terminal (6 módulos + recarga de datos de ejemplo). |
+| `src/sistema.py` | Fachada que coordina los módulos y emite eventos. |
+| `src/productos.py`, `src/ubicaciones.py`, `src/ventas.py`, `src/pedidos.py`, `src/logistica.py`, `src/seguimiento.py` | Gestores de las seis funcionalidades. |
+| `src/modelos.py`, `src/errores.py`, `src/utils.py` | Entidades, errores de negocio y validaciones compartidas. |
+| `src/datos.py` | Dataset de demostración (se carga al iniciar). |
+| `docs/` | Justificación de las estructuras de datos por funcionalidad. |
+| `tests/` | 34 pruebas con `unittest` (sin dependencias externas). |
+
+El menú permite consultar/registrar productos, transferencias, ventas y pedidos, calcular rutas, revisar el registro de operaciones y recargar los datos de ejemplo. Para ver un despacho completo: **4 → 4** (atender `PED-001`), **4 → 5** (estado `LISTO`), **4 → 7** (despachar con ID de entrega).
 
 ## Cómo ejecutarlo
 

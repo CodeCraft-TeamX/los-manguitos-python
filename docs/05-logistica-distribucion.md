@@ -2,7 +2,7 @@
 
 **Necesidad:** representar conexiones entre central, bodegas y sucursales; consultar rutas posibles y administrar entregas.
 
-**Estado:** diseñado, pendiente de implementación.
+**Estado:** implementado en `src/logistica.py` (Dijkstra con `heapq` y DFS recursivo).
 
 ## Estructuras elegidas
 

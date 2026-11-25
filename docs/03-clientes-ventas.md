@@ -2,7 +2,7 @@
 
 **Necesidad:** registrar clientes, productos vendidos, cantidades, precios y operaciones de venta.
 
-**Estado:** diseñado, pendiente de implementación.
+**Estado:** implementado en `src/ventas.py`; `Sistema.registrar_venta` valida todo el stock antes de descontarlo para que la operación sea atómica.
 
 ## Estructuras elegidas
 

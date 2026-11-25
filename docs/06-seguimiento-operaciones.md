@@ -2,7 +2,7 @@
 
 **Necesidad:** mantener registros de movimientos de inventario, ventas, pedidos y despachos realizados.
 
-**Estado:** diseñado, pendiente de implementación.
+**Estado:** implementado en `src/seguimiento.py`; los cinco tipos de evento se emiten desde `Sistema`.
 
 ## Estructuras elegidas
 

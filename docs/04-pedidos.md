@@ -2,7 +2,7 @@
 
 **Necesidad:** registrar pedidos, consultar estados y organizar la atención y el despacho.
 
-**Estado:** diseñado, pendiente de implementación.
+**Estado:** implementado en `src/pedidos.py`. Deshacer un cambio restaura el estado, pero no reinserta el pedido en la cola de atención.
 
 ## Estructuras elegidas
 
