@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from src.errores import StockInsuficiente, TransicionInvalida
 from src.logistica import RedLogistica
-from src.modelos import Entrega, Item, Pedido, Transferencia, Venta
+from src.modelos import Entrega, Item, Pedido, Producto, Proveedor, Transferencia, Venta
 from src.pedidos import GestorPedidos
 from src.productos import GestorProductos
 from src.seguimiento import RegistroOperaciones
@@ -27,7 +27,40 @@ class Sistema:
         self.logistica = RedLogistica()
         self.seguimiento = RegistroOperaciones()
 
-    # --- Funcionalidad 1: inventario -------------------------------------
+    # --- Funcionalidad 1: inventario y proveedores -----------------------
+
+    def registrar_proveedor(
+        self, id_proveedor: str, nombre: str, contacto: str = ""
+    ) -> Proveedor:
+        """Registra un proveedor y deja constancia en la bitácora."""
+        proveedor = self.productos.registrar_proveedor(id_proveedor, nombre, contacto)
+        self.seguimiento.registrar_evento(
+            "inventario", proveedor.id, f"Proveedor registrado: {proveedor.nombre}"
+        )
+        return proveedor
+
+    def registrar_producto(
+        self,
+        sku: str,
+        nombre: str,
+        categoria: str,
+        proveedor_id: str,
+        ubicacion: str | None = None,
+        stock_inicial: int = 0,
+    ) -> Producto:
+        """Da de alta un producto y opcionalmente su stock inicial en una ubicación."""
+        if stock_inicial > 0 and ubicacion:
+            self.ubicaciones.consultar_ubicacion(ubicacion)
+        producto = self.productos.registrar_producto(sku, nombre, categoria, proveedor_id)
+        if stock_inicial > 0 and ubicacion:
+            self.ubicaciones.ajustar_stock(ubicacion, sku, stock_inicial)
+            self.productos.registrar_movimiento(
+                sku, "entrada", stock_inicial, f"Stock inicial ({proveedor_id})"
+            )
+        self.seguimiento.registrar_evento(
+            "inventario", sku, f"Producto registrado: {producto.nombre}"
+        )
+        return producto
 
     def registrar_entrada(
         self, sku: str, cantidad: int, ubicacion: str, descripcion: str = "Entrada"
@@ -106,22 +139,23 @@ class Sistema:
             self.productos.registrar_movimiento(
                 item.sku, "salida", item.cantidad, f"Venta {id_venta}"
             )
-        venta = self.ventas.registrar_venta(id_venta, id_cliente, items)
+        venta = self.ventas.registrar_venta(id_venta, id_cliente, items, ubicacion=ubicacion)
         self.seguimiento.registrar_evento(
-            "venta", id_venta, f"Venta registrada por {venta.total}"
+            "venta", id_venta, f"Venta registrada por ${venta.total:.2f}"
         )
         return venta
 
-    def cancelar_ultima_venta(self, ubicacion: str = "CENTRAL") -> Venta:
-        """Cancela la última venta y devuelve las unidades al stock."""
+    def cancelar_ultima_venta(self, ubicacion: str | None = None) -> Venta:
+        """Cancela la última venta y devuelve las unidades al stock de su ubicación."""
         venta = self.ventas.cancelar_ultima_venta()
+        destino = ubicacion or venta.ubicacion
         for item in venta.items:
-            self.ubicaciones.ajustar_stock(ubicacion, item.sku, item.cantidad)
+            self.ubicaciones.ajustar_stock(destino, item.sku, item.cantidad)
             self.productos.registrar_movimiento(
                 item.sku, "entrada", item.cantidad, f"Cancelación {venta.id}"
             )
         self.seguimiento.registrar_evento(
-            "venta", venta.id, "Última venta cancelada y stock restaurado"
+            "venta", venta.id, f"Última venta cancelada y stock restaurado en {destino}"
         )
         return venta
 
@@ -146,7 +180,7 @@ class Sistema:
         """Atiende el pedido más antiguo de la cola."""
         pedido = self.pedidos.atender_siguiente()
         self.seguimiento.registrar_evento(
-            "pedido", pedido.id, "Pedido en preparación"
+            "pedido", pedido.id, f"Pedido pasó a {pedido.estado}"
         )
         return pedido
 

@@ -18,9 +18,10 @@ from src.modelos import Item, Pedido
 from src.utils import texto_requerido
 from src.ventas import GestorVentas
 
-ESTADOS = ("RECIBIDO", "PREPARANDO", "LISTO", "DESPACHADO", "CANCELADO")
+ESTADOS = ("NUEVO", "CONFIRMADO", "PREPARANDO", "LISTO", "DESPACHADO", "CANCELADO")
 TRANSICIONES: dict[str, set[str]] = {
-    "RECIBIDO": {"PREPARANDO", "CANCELADO"},
+    "NUEVO": {"CONFIRMADO", "CANCELADO"},
+    "CONFIRMADO": {"PREPARANDO", "CANCELADO"},
     "PREPARANDO": {"LISTO", "CANCELADO"},
     "LISTO": {"DESPACHADO", "CANCELADO"},
     "DESPACHADO": set(),
@@ -67,11 +68,13 @@ class GestorPedidos:
         return self.consultar_pedido(id_pedido).estado
 
     def atender_siguiente(self) -> Pedido:
-        """Saca el primer pedido de la cola y lo pasa a PREPARANDO."""
+        """Saca el primer pedido pendiente de la cola y lo confirma."""
+        while self._cola and self._cola[0].estado != "NUEVO":
+            self._cola.popleft()
         if not self._cola:
             raise ErrorDeNegocio("No hay pedidos pendientes de atención")
         pedido = self._cola.popleft()
-        self.cambiar_estado(pedido.id, "PREPARANDO")
+        self.cambiar_estado(pedido.id, "CONFIRMADO")
         return pedido
 
     def cambiar_estado(self, id_pedido: str, nuevo_estado: str) -> Pedido:

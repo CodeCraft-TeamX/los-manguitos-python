@@ -89,12 +89,12 @@ def _leer_items() -> list[Item]:
             break
         partes = [parte.strip() for parte in linea.split(",")]
         if len(partes) != 3:
-            _decir("  Formato inválido. Ejemplo: MANG-01,2,25000", "bold red")
+            _decir("  Formato inválido. Ejemplo: PR-001,2,2.40", "bold red")
             continue
         try:
-            items.append(Item(partes[0], int(partes[1]), int(partes[2])))
+            items.append(Item(partes[0], int(partes[1]), float(partes[2])))
         except ValueError:
-            _decir("  Cantidad y precio deben ser enteros.", "bold red")
+            _decir("  Cantidad debe ser entero y precio numérico.", "bold red")
     return items
 
 
@@ -214,6 +214,37 @@ def _ver_movimientos(sistema: Sistema) -> None:
     consola.print(tabla)
 
 
+def _registrar_producto(sistema: Sistema) -> None:
+    sku = _pedir_texto("SKU (ej. PR-040): ")
+    nombre = _pedir_texto("Nombre: ")
+    _decir(f"Categorías: {', '.join(sistema.productos.listar_categorias())}", "dim")
+    categoria = _pedir_texto("Categoría: ")
+    _decir(
+        "Proveedores: "
+        + ", ".join(f"{p.id} ({p.nombre})" for p in sistema.productos.listar_proveedores()),
+        "dim",
+    )
+    proveedor_id = _pedir_texto("ID de proveedor: ")
+    ubicacion = _pedir_texto("Ubicación inicial (Enter = sin stock inicial): ")
+    stock_inicial = _pedir_entero("Stock inicial: ", minimo=0) if ubicacion else 0
+    producto = sistema.registrar_producto(
+        sku,
+        nombre,
+        categoria,
+        proveedor_id,
+        ubicacion=ubicacion or None,
+        stock_inicial=stock_inicial,
+    )
+    _decir(f"Producto {producto.sku} ({producto.nombre}) registrado.", "bold green")
+
+
+def _registrar_categoria(sistema: Sistema) -> None:
+    nombre = _pedir_texto("Nombre de categoría: ")
+    padre = _pedir_texto("Categoría padre (Enter = raíz): ") or None
+    sistema.productos.registrar_categoria(nombre, padre)
+    _decir(f"Categoría '{nombre}' registrada.", "bold green")
+
+
 def menu_productos(sistema: Sistema) -> None:
     """Submenú de productos, categorías y movimientos."""
     opciones: Opciones = {
@@ -223,8 +254,42 @@ def menu_productos(sistema: Sistema) -> None:
         "4": ("Registrar entrada", _registrar_entrada),
         "5": ("Registrar salida", _registrar_salida),
         "6": ("Ver movimientos de un producto", _ver_movimientos),
+        "7": ("Registrar producto", _registrar_producto),
+        "8": ("Registrar categoría", _registrar_categoria),
     }
     _submenu("1. Productos e inventario", opciones, sistema)
+
+
+def _listar_proveedores(sistema: Sistema) -> None:
+    proveedores = sistema.productos.listar_proveedores()
+    if not proveedores:
+        _decir("No hay proveedores registrados.", "italic yellow")
+        return
+    tabla = _tabla("ID", "Nombre", "Contacto")
+    for proveedor in proveedores:
+        tabla.add_row(
+            Text(proveedor.id, style="bold yellow"),
+            Text(proveedor.nombre),
+            Text(proveedor.contacto or "—", style="cyan"),
+        )
+    consola.print(tabla)
+
+
+def _registrar_proveedor(sistema: Sistema) -> None:
+    id_proveedor = _pedir_texto("ID de proveedor (ej. PROV-03): ")
+    nombre = _pedir_texto("Nombre: ")
+    contacto = _pedir_texto("Teléfono o contacto: ")
+    proveedor = sistema.registrar_proveedor(id_proveedor, nombre, contacto)
+    _decir(f"Proveedor {proveedor.id} ({proveedor.nombre}) registrado.", "bold green")
+
+
+def menu_proveedores(sistema: Sistema) -> None:
+    """Submenú de administración de proveedores."""
+    opciones: Opciones = {
+        "1": ("Listar proveedores", _listar_proveedores),
+        "2": ("Registrar proveedor", _registrar_proveedor),
+    }
+    _submenu("7. Proveedores", opciones, sistema)
 
 
 # --- Funcionalidad 2: bodegas y sucursales -------------------------------
@@ -329,9 +394,10 @@ def _registrar_cliente(sistema: Sistema) -> None:
 def _registrar_venta(sistema: Sistema) -> None:
     id_venta = _pedir_texto("ID de venta: ")
     id_cliente = _pedir_texto("ID de cliente: ")
+    ubicacion = _pedir_texto("Ubicación de venta (Enter = CENTRAL): ") or "CENTRAL"
     items = _leer_items()
-    venta = sistema.registrar_venta(id_venta, id_cliente, items)
-    _decir(f"Venta {venta.id} registrada por {venta.total}.", "bold green")
+    venta = sistema.registrar_venta(id_venta, id_cliente, items, ubicacion=ubicacion)
+    _decir(f"Venta {venta.id} registrada por ${venta.total:.2f}.", "bold green")
 
 
 def _listar_ventas(sistema: Sistema) -> None:
@@ -346,7 +412,7 @@ def _listar_ventas(sistema: Sistema) -> None:
         tabla.add_row(
             Text(venta.id, style="bold yellow"),
             Text(venta.cliente_id),
-            Text(str(venta.total)),
+            Text(f"${venta.total:.2f}"),
             Text(estado, style=estilo),
             Text(_formatear_items(venta.items)),
         )
@@ -376,7 +442,7 @@ def _cancelar_venta(sistema: Sistema) -> None:
 
 
 def _total_vendido(sistema: Sistema) -> None:
-    _decir(f"Total vendido (sin cancelaciones): {sistema.ventas.total_vendido()}", "bold green")
+    _decir(f"Total vendido (sin cancelaciones): ${sistema.ventas.total_vendido():.2f}", "bold green")
 
 
 def menu_ventas(sistema: Sistema) -> None:
@@ -404,7 +470,8 @@ def _listar_pedidos(sistema: Sistema) -> None:
     tabla = _tabla("ID", "Cliente", "Destino", "Estado", "Ítems")
     for pedido in pedidos:
         estados = {
-            "RECIBIDO": "yellow",
+            "NUEVO": "yellow",
+            "CONFIRMADO": "blue",
             "PREPARANDO": "cyan",
             "LISTO": "green",
             "DESPACHADO": "bold green",
@@ -451,7 +518,7 @@ def _atender_pedido(sistema: Sistema) -> None:
 
 def _cambiar_estado(sistema: Sistema) -> None:
     id_pedido = _pedir_texto("ID de pedido: ")
-    _decir("Estados: RECIBIDO, PREPARANDO, LISTO, DESPACHADO, CANCELADO", "dim")
+    _decir("Estados: NUEVO, CONFIRMADO, PREPARANDO, LISTO, DESPACHADO, CANCELADO", "dim")
     estado = _pedir_texto("Nuevo estado: ").upper()
     pedido = sistema.cambiar_estado_pedido(id_pedido, estado)
     _decir(f"Pedido {pedido.id} ahora está {pedido.estado}.", "bold green")
@@ -585,9 +652,13 @@ def _eventos_por_tipo(sistema: Sistema) -> None:
 
 
 def _eventos_entre_fechas(sistema: Sistema) -> None:
-    _decir("Formato: AAAA-MM-DDTHH:MM (UTC), por ejemplo 2026-11-24T10:00", "dim")
-    desde = datetime.fromisoformat(_pedir_texto("Desde: "))
-    hasta = datetime.fromisoformat(_pedir_texto("Hasta: "))
+    _decir("Formato: AAAA-MM-DDTHH:MM (UTC), por ejemplo 2026-11-26T10:00", "dim")
+    try:
+        desde = datetime.fromisoformat(_pedir_texto("Desde: "))
+        hasta = datetime.fromisoformat(_pedir_texto("Hasta: "))
+    except ValueError:
+        _decir("Formato de fecha inválido. Use AAAA-MM-DDTHH:MM.", "bold red")
+        return
     if desde.tzinfo is None:
         desde = desde.replace(tzinfo=timezone.utc)
     if hasta.tzinfo is None:
@@ -648,7 +719,8 @@ def run() -> None:
             ("4", "Pedidos"),
             ("5", "Logística y distribución"),
             ("6", "Seguimiento de operaciones"),
-            ("7", "Recargar datos de ejemplo"),
+            ("7", "Proveedores"),
+            ("8", "Recargar datos de ejemplo"),
             ("0", "Salir"),
         )
         for clave, etiqueta in modulos:
@@ -659,7 +731,7 @@ def run() -> None:
         if opcion == "0":
             _decir("Hasta pronto.", "bold green")
             return
-        if opcion == "7":
+        if opcion == "8":
             sistema = crear_sistema_con_datos()
             _decir("Datos de ejemplo recargados.", "bold green")
             _pausar()
@@ -672,6 +744,7 @@ def run() -> None:
             "4": menu_pedidos,
             "5": menu_logistica,
             "6": menu_seguimiento,
+            "7": menu_proveedores,
         }
         menu = menus.get(opcion)
         if menu is None:

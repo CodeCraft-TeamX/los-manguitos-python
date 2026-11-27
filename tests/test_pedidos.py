@@ -10,35 +10,35 @@ from src.pedidos import GestorPedidos
 class TestGestorPedidos(unittest.TestCase):
     def setUp(self) -> None:
         self.gestor = GestorPedidos()
-        self.gestor.crear_pedido("PED-001", "CLI-01", "SUC-01", [Item("MANG-01", 1, 10)])
-        self.gestor.crear_pedido("PED-002", "CLI-02", "SUC-02", [Item("GUAN-01", 2, 10)])
+        self.gestor.crear_pedido("P-2026-311", "CLI-01", "SUC-CENTRO", [Item("PR-001", 1, 2.40)])
+        self.gestor.crear_pedido("P-2026-312", "CLI-02", "SUC-SANTA-ANA", [Item("PR-024", 2, 1.50)])
 
     def test_atencion_fifo_y_estado_inicial(self) -> None:
         pedido = self.gestor.atender_siguiente()
-        self.assertEqual(pedido.id, "PED-001")
-        self.assertEqual(pedido.estado, "PREPARANDO")
-        self.assertEqual([p.id for p in self.gestor.pedidos_pendientes()], ["PED-002"])
-        self.assertEqual(self.gestor.consultar_estado("PED-002"), "RECIBIDO")
+        self.assertEqual(pedido.id, "P-2026-311")
+        self.assertEqual(pedido.estado, "CONFIRMADO")
+        self.assertEqual([p.id for p in self.gestor.pedidos_pendientes()], ["P-2026-312"])
+        self.assertEqual(self.gestor.consultar_estado("P-2026-312"), "NUEVO")
 
     def test_transicion_invalida(self) -> None:
         with self.assertRaises(TransicionInvalida):
-            self.gestor.cambiar_estado("PED-001", "DESPACHADO")
+            self.gestor.cambiar_estado("P-2026-311", "DESPACHADO")
 
     def test_deshacer_ultimo_cambio_usa_pila(self) -> None:
         self.gestor.atender_siguiente()
-        self.gestor.cambiar_estado("PED-001", "LISTO")
-        self.assertEqual(self.gestor.consultar_estado("PED-001"), "LISTO")
-        self.gestor.deshacer_ultimo_cambio("PED-001")
-        self.assertEqual(self.gestor.consultar_estado("PED-001"), "PREPARANDO")
+        self.gestor.cambiar_estado("P-2026-311", "PREPARANDO")
+        self.assertEqual(self.gestor.consultar_estado("P-2026-311"), "PREPARANDO")
+        self.gestor.deshacer_ultimo_cambio("P-2026-311")
+        self.assertEqual(self.gestor.consultar_estado("P-2026-311"), "CONFIRMADO")
 
     def test_cola_vacia_y_sin_historial(self) -> None:
         self.gestor.atender_siguiente()
         self.gestor.atender_siguiente()
         with self.assertRaises(ErrorDeNegocio):
             self.gestor.atender_siguiente()
-        self.gestor.deshacer_ultimo_cambio("PED-001")
+        self.gestor.deshacer_ultimo_cambio("P-2026-311")
         with self.assertRaises(ErrorDeNegocio):
-            self.gestor.deshacer_ultimo_cambio("PED-001")
+            self.gestor.deshacer_ultimo_cambio("P-2026-311")
 
 
 if __name__ == "__main__":

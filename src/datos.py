@@ -7,64 +7,83 @@ from src.sistema import Sistema
 
 
 def cargar_datos_demo(sistema: Sistema) -> Sistema:
-    """Carga categorías, productos, stock, clientes, ventas, pedidos y red."""
-    # Funcionalidad 1: árbol de categorías y catálogo.
-    sistema.productos.registrar_categoria("Indumentaria")
-    sistema.productos.registrar_categoria("Mangas", "Indumentaria")
-    sistema.productos.registrar_categoria("Manos", "Indumentaria")
-    sistema.productos.registrar_categoria("Térmicas", "Mangas")
-    sistema.productos.registrar_producto("MANG-01", "Manga térmica", "Térmicas", "PROV-01")
-    sistema.productos.registrar_producto("MANG-02", "Manga clásica", "Mangas", "PROV-01")
-    sistema.productos.registrar_producto("GUAN-01", "Guante de trabajo", "Manos", "PROV-02")
+    """Carga proveedores, categorías, productos, stock, clientes, ventas, pedidos y red."""
+    # Funcionalidad 1: proveedores, árbol de categorías y catálogo (frutas y procesados).
+    sistema.productos.registrar_proveedor("PROV-01", "Finca El Paraíso", "7890-1122")
+    sistema.productos.registrar_proveedor("PROV-02", "Procesadora del Valle", "7890-3344")
+
+    sistema.productos.registrar_categoria("Frutas frescas")
+    sistema.productos.registrar_categoria("Cítricos", "Frutas frescas")
+    sistema.productos.registrar_categoria("Procesados")
+    sistema.productos.registrar_categoria("Néctares", "Procesados")
+
+    sistema.productos.registrar_producto("PR-001", "Mango Tommy", "Frutas frescas", "PROV-01")
+    sistema.productos.registrar_producto("PR-008", "Limón pérsico", "Cítricos", "PROV-01")
+    sistema.productos.registrar_producto("PR-024", "Néctar de mango", "Néctares", "PROV-02")
+    sistema.productos.registrar_producto("PR-015", "Aguacate nacional", "Frutas frescas", "PROV-01")
+    sistema.productos.registrar_producto("PR-031", "Pulpa de mango", "Procesados", "PROV-02")
 
     # Funcionalidad 2: ubicaciones y stock inicial.
     for id_ubicacion, nombre, tipo in (
-        ("CENTRAL", "Casa central", "central"),
-        ("BODEGA-NORTE", "Bodega norte", "bodega"),
-        ("BODEGA-SUR", "Bodega sur", "bodega"),
-        ("SUC-01", "Sucursal Centro", "sucursal"),
-        ("SUC-02", "Sucursal Norte", "sucursal"),
+        ("CENTRAL", "Bodega central", "central"),
+        ("SUC-CENTRO", "Sucursal Centro", "sucursal"),
+        ("SUC-SANTA-ANA", "Sucursal Santa Ana", "sucursal"),
+        ("SUC-SAN-MIGUEL", "Sucursal San Miguel", "sucursal"),
+        ("PUERTO-LA-LIBERTAD", "Puerto La Libertad", "sucursal"),
     ):
         sistema.ubicaciones.registrar_ubicacion(id_ubicacion, nombre, tipo)
     for id_ubicacion, sku, cantidad in (
-        ("CENTRAL", "MANG-01", 40),
-        ("CENTRAL", "MANG-02", 20),
-        ("CENTRAL", "GUAN-01", 15),
-        ("BODEGA-NORTE", "MANG-01", 10),
-        ("SUC-01", "MANG-01", 8),
-        ("SUC-02", "GUAN-01", 4),
+        ("CENTRAL", "PR-001", 14),
+        ("CENTRAL", "PR-008", 24),
+        ("CENTRAL", "PR-024", 19),
+        ("CENTRAL", "PR-031", 48),
+        ("SUC-CENTRO", "PR-008", 8),
+        ("SUC-SANTA-ANA", "PR-015", 74),
     ):
         sistema.ubicaciones.ajustar_stock(id_ubicacion, sku, cantidad)
-    for sku, tipo, cantidad in (
-        ("MANG-01", "entrada", 40),
-        ("MANG-01", "salida", 5),
-        ("MANG-02", "entrada", 20),
+    for sku, tipo, cantidad, descripcion in (
+        ("PR-001", "entrada", 40, "Finca El Paraíso"),
+        ("PR-008", "salida", 24, "Transferencia a Santa Ana"),
+        ("PR-024", "entrada", 20, "Producción semanal"),
     ):
-        sistema.productos.registrar_movimiento(sku, tipo, cantidad, "Datos de ejemplo")
+        sistema.productos.registrar_movimiento(sku, tipo, cantidad, descripcion)
 
     # Funcionalidad 3: clientes y ventas (descuentan stock y emiten eventos).
-    sistema.ventas.registrar_cliente("CLI-01", "Juan Pérez", "natural")
-    sistema.ventas.registrar_cliente("CLI-02", "Distribuidora Sur", "empresa")
-    sistema.registrar_venta("VEN-001", "CLI-01", [Item("MANG-01", 2, 25000)])
-    sistema.registrar_venta("VEN-002", "CLI-02", [Item("GUAN-01", 1, 18000)])
+    sistema.ventas.registrar_cliente("CLI-01", "Mercado La Ceiba", "frecuente")
+    sistema.ventas.registrar_cliente("CLI-02", "Restaurante El Patio", "frecuente")
+    sistema.ventas.registrar_cliente("CLI-03", "Rosa Hernández", "minorista")
+    sistema.ventas.registrar_cliente("CLI-04", "Hotel Las Palmeras", "frecuente")
+    sistema.ventas.registrar_cliente("CLI-05", "José Martínez", "minorista")
+    sistema.registrar_venta("V-2026-0841", "CLI-02", [Item("PR-031", 2, 4.10)])
+    sistema.registrar_venta(
+        "V-2026-0842",
+        "CLI-01",
+        [Item("PR-001", 2, 2.40), Item("PR-024", 3, 1.50)],
+    )
 
-    # Funcionalidad 4: pedidos pendientes en la cola de atención.
-    sistema.crear_pedido("PED-001", "CLI-01", "SUC-01", [Item("MANG-01", 2, 25000)])
-    sistema.crear_pedido("PED-002", "CLI-02", "SUC-02", [Item("GUAN-01", 1, 18000)])
-    sistema.crear_pedido("PED-003", "CLI-01", "SUC-01", [Item("MANG-02", 3, 19000)])
+    # Funcionalidad 4: pedidos pendientes en la cola FIFO de atención.
+    sistema.crear_pedido("P-2026-311", "CLI-01", "SUC-SANTA-ANA", [Item("PR-001", 5, 2.40)])
+    sistema.crear_pedido("P-2026-312", "CLI-02", "SUC-CENTRO", [Item("PR-024", 4, 1.50)])
+    sistema.crear_pedido("P-2026-313", "CLI-04", "PUERTO-LA-LIBERTAD", [Item("PR-031", 3, 4.10)])
 
     # Funcionalidad 5: red logística y una transferencia pendiente.
-    for nodo in ("CENTRAL", "BODEGA-NORTE", "BODEGA-SUR", "SUC-01", "SUC-02"):
+    for nodo in (
+        "CENTRAL",
+        "SUC-CENTRO",
+        "SUC-SANTA-ANA",
+        "SUC-SAN-MIGUEL",
+        "PUERTO-LA-LIBERTAD",
+    ):
         sistema.logistica.agregar_nodo(nodo)
     for origen, destino, distancia in (
-        ("CENTRAL", "BODEGA-NORTE", 12),
-        ("CENTRAL", "BODEGA-SUR", 8),
-        ("BODEGA-NORTE", "SUC-01", 7),
-        ("BODEGA-SUR", "SUC-02", 9),
-        ("BODEGA-NORTE", "SUC-02", 15),
+        ("CENTRAL", "SUC-CENTRO", 12),
+        ("CENTRAL", "SUC-SANTA-ANA", 26),
+        ("CENTRAL", "SUC-SAN-MIGUEL", 48),
+        ("CENTRAL", "PUERTO-LA-LIBERTAD", 18),
+        ("SUC-CENTRO", "PUERTO-LA-LIBERTAD", 14),
     ):
         sistema.logistica.agregar_conexion(origen, destino, distancia)
-    sistema.solicitar_transferencia("TR-001", "CENTRAL", "SUC-02", "MANG-01", 5)
+    sistema.solicitar_transferencia("TR-2026-019", "CENTRAL", "SUC-SANTA-ANA", "PR-008", 24)
     return sistema
 
 

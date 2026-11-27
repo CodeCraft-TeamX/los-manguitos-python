@@ -15,7 +15,7 @@ Prototipo de consola para el sistema integral de gestión de inventario, ventas 
 | `docs/` | Justificación de las estructuras de datos por funcionalidad. |
 | `tests/` | 34 pruebas con `unittest`. |
 
-El menú permite consultar/registrar productos, transferencias, ventas y pedidos, calcular rutas, revisar el registro de operaciones y recargar los datos de ejemplo. Para ver un despacho completo: **4 → 4** (atender `PED-001`), **4 → 5** (estado `LISTO`), **4 → 7** (despachar con ID de entrega).
+El menú permite consultar/registrar proveedores, productos, transferencias, ventas y pedidos, calcular rutas, revisar el registro de operaciones y recargar los datos de ejemplo. Para ver un despacho completo: **4 → 4** (atender `P-2026-311` a `CONFIRMADO`), **4 → 5** (pasar a `PREPARANDO` y luego `LISTO`), **4 → 7** (despachar con ID de entrega).
 
 ## Cómo ejecutarlo
 

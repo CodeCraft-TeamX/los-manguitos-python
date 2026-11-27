@@ -8,19 +8,46 @@ aquí se guarda el historial de entradas y salidas.
 from __future__ import annotations
 
 from src.errores import NoEncontrado, ValidacionError
-from src.modelos import Movimiento, Producto, ahora
+from src.modelos import Movimiento, Producto, Proveedor, ahora
 from src.utils import entero_requerido, texto_requerido
 
 TIPOS_MOVIMIENTO = ("entrada", "salida")
 
 
 class GestorProductos:
-    """Administra productos, movimientos y la jerarquía de categorías."""
+    """Administra proveedores, productos, movimientos y jerarquía de categorías."""
 
     def __init__(self) -> None:
+        self._proveedores: dict[str, Proveedor] = {}
         self._productos: dict[str, Producto] = {}
         self._movimientos: dict[str, list[Movimiento]] = {}
         self._categorias: dict[str, list[str]] = {}
+
+    def registrar_proveedor(
+        self, id_proveedor: str, nombre: str, contacto: str = ""
+    ) -> Proveedor:
+        """Da de alta un proveedor con identificador único."""
+        id_proveedor = texto_requerido(id_proveedor, "ID de proveedor")
+        if id_proveedor in self._proveedores:
+            raise ValidacionError(f"El proveedor '{id_proveedor}' ya está registrado")
+        proveedor = Proveedor(
+            id=id_proveedor,
+            nombre=texto_requerido(nombre, "Nombre del proveedor"),
+            contacto=contacto.strip(),
+        )
+        self._proveedores[id_proveedor] = proveedor
+        return proveedor
+
+    def consultar_proveedor(self, id_proveedor: str) -> Proveedor:
+        """Devuelve un proveedor registrado o falla si no existe."""
+        try:
+            return self._proveedores[id_proveedor]
+        except KeyError as exc:
+            raise NoEncontrado(f"Proveedor '{id_proveedor}' no encontrado") from exc
+
+    def listar_proveedores(self) -> list[Proveedor]:
+        """Devuelve una copia de los proveedores registrados."""
+        return list(self._proveedores.values())
 
     def registrar_categoria(self, nombre: str, padre: str | None = None) -> None:
         """Registra una categoría, opcionalmente debajo de otra."""
@@ -33,21 +60,27 @@ class GestorProductos:
         if padre is not None and nombre not in self._categorias[padre]:
             self._categorias[padre].append(nombre)
 
+    def listar_categorias(self) -> list[str]:
+        """Devuelve los nombres de las categorías registradas."""
+        return list(self._categorias)
+
     def registrar_producto(
         self, sku: str, nombre: str, categoria: str, proveedor_id: str
     ) -> Producto:
-        """Da de alta un producto; el SKU es único."""
+        """Da de alta un producto; el SKU es único y valida categoría y proveedor."""
         sku = texto_requerido(sku, "SKU")
         if sku in self._productos:
             raise ValidacionError(f"El producto '{sku}' ya está registrado")
         categoria = texto_requerido(categoria, "Categoría")
         if categoria not in self._categorias:
             raise NoEncontrado(f"Categoría '{categoria}' no registrada")
+        proveedor_id = texto_requerido(proveedor_id, "Proveedor")
+        self.consultar_proveedor(proveedor_id)
         producto = Producto(
             sku=sku,
             nombre=texto_requerido(nombre, "Nombre"),
             categoria=categoria,
-            proveedor_id=texto_requerido(proveedor_id, "Proveedor"),
+            proveedor_id=proveedor_id,
         )
         self._productos[sku] = producto
         self._movimientos[sku] = []

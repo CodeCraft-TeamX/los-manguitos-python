@@ -11,6 +11,15 @@ def ahora() -> datetime:
     return datetime.now(timezone.utc)
 
 
+@dataclass(frozen=True, slots=True)
+class Proveedor:
+    """Proveedor registrado que abastece productos al catálogo."""
+
+    id: str
+    nombre: str
+    contacto: str = ""
+
+
 @dataclass(slots=True)
 class Producto:
     """Producto del catálogo. El stock vive en ``GestorUbicaciones``."""
@@ -68,7 +77,7 @@ class Item:
 
     sku: str
     cantidad: int
-    precio_unitario: int
+    precio_unitario: float
 
 
 @dataclass(slots=True)
@@ -78,8 +87,9 @@ class Venta:
     id: str
     cliente_id: str
     items: list[Item]
-    total: int
+    total: float
     timestamp: datetime
+    ubicacion: str = "CENTRAL"
     cancelada: bool = False
 
 
@@ -91,7 +101,7 @@ class Pedido:
     cliente_id: str
     destino: str
     items: list[Item]
-    estado: str = "RECIBIDO"
+    estado: str = "NUEVO"
     creado_en: datetime = field(default_factory=ahora)
 
 

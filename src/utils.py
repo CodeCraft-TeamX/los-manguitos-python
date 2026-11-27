@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from src.errores import ValidacionError
 
 
@@ -17,6 +19,18 @@ def entero_requerido(valor: int, nombre: str, minimo: int = 1) -> int:
     if isinstance(valor, bool) or not isinstance(valor, int) or valor < minimo:
         raise ValidacionError(f"{nombre} debe ser un entero mayor o igual que {minimo}")
     return valor
+
+
+def numero_positivo(valor: int | float, nombre: str) -> float:
+    """Valida que un número sea finito y mayor que cero."""
+    if (
+        isinstance(valor, bool)
+        or not isinstance(valor, (int, float))
+        or not math.isfinite(valor)
+        or valor <= 0
+    ):
+        raise ValidacionError(f"{nombre} debe ser un número mayor que cero")
+    return float(valor)
 
 
 def pedir_texto(mensaje: str) -> str:

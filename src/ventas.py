@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from src.errores import ErrorDeNegocio, NoEncontrado, ValidacionError
 from src.modelos import Cliente, Item, Venta, ahora
-from src.utils import entero_requerido, texto_requerido
+from src.utils import entero_requerido, numero_positivo, texto_requerido
 
-TIPOS_CLIENTE = ("natural", "empresa")
+TIPOS_CLIENTE = ("frecuente", "minorista", "natural", "empresa")
 
 
 class GestorVentas:
@@ -46,20 +46,24 @@ class GestorVentas:
         return list(self._clientes.values())
 
     @staticmethod
-    def validar_items(items: list[Item]) -> int:
+    def validar_items(items: list[Item]) -> float:
         """Valida los ítems de una venta/pedido y devuelve el total."""
         if not items:
             raise ValidacionError("La operación debe tener al menos un ítem")
-        total = 0
+        total = 0.0
         for item in items:
             texto_requerido(item.sku, "SKU")
             entero_requerido(item.cantidad, "Cantidad")
-            entero_requerido(item.precio_unitario, "Precio unitario")
-            total += item.cantidad * item.precio_unitario
-        return total
+            precio = numero_positivo(item.precio_unitario, "Precio unitario")
+            total += item.cantidad * precio
+        return round(total, 2)
 
     def registrar_venta(
-        self, id_venta: str, id_cliente: str, items: list[Item]
+        self,
+        id_venta: str,
+        id_cliente: str,
+        items: list[Item],
+        ubicacion: str = "CENTRAL",
     ) -> Venta:
         """Registra una venta y la apila para permitir cancelarla."""
         id_venta = texto_requerido(id_venta, "ID de venta")
@@ -67,7 +71,14 @@ class GestorVentas:
             raise ValidacionError(f"Venta '{id_venta}' ya registrada")
         self.consultar_cliente(id_cliente)
         total = self.validar_items(items)
-        venta = Venta(id_venta, id_cliente, list(items), total, ahora())
+        venta = Venta(
+            id_venta,
+            id_cliente,
+            list(items),
+            total,
+            ahora(),
+            ubicacion=texto_requerido(ubicacion, "Ubicación"),
+        )
         self._ventas.append(venta)
         self._por_cliente[id_cliente].append(id_venta)
         self._pila_activas.append(venta)
@@ -92,6 +103,6 @@ class GestorVentas:
         """Copia del registro cronológico de ventas."""
         return list(self._ventas)
 
-    def total_vendido(self) -> int:
+    def total_vendido(self) -> float:
         """Suma de las ventas no canceladas."""
-        return sum(v.total for v in self._ventas if not v.cancelada)
+        return round(sum(v.total for v in self._ventas if not v.cancelada), 2)
